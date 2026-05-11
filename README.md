@@ -3,7 +3,7 @@
 Express server that handles Notion OAuth on behalf of the Margin desktop
 app. Deployed to Vercel for production. Runs locally with ngrok only if
 you want to debug the Express code with breakpoints (not the default
-workflow — the desktop app talks to the deployed staging environment
+workflow, the desktop app talks to the deployed staging environment
 during development).
 
 This repo is intentionally separate from the desktop app repo. The two
