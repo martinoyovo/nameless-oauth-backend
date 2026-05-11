@@ -1,0 +1,21 @@
+{
+  "name": "margin-oauth-backend",
+  "version": "1.0.0",
+  "description": "OAuth backend for Margin. Deploys to Vercel.",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["oauth", "notion", "express"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "dotenv": "^16.3.1"
+  }
+}
