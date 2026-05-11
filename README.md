@@ -56,7 +56,7 @@ Healthcheck at `GET /`.
 
 ## Deploying your own
 
-`oauth-backend/DEPLOY.md` walks through the full setup. Short version:
+[`DEPLOY.md`](./DEPLOY.md) walks through the full setup. Short version:
 
 1. Fork this repo.
 2. Create two Notion integrations (dev + prod) at https://www.notion.so/my-integrations.
@@ -64,9 +64,9 @@ Healthcheck at `GET /`.
 4. Set env vars (`NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, `NOTION_REDIRECT_URI`) for both Production and Preview scopes.
 5. Set up domain CNAMEs.
 
-You don't need to deploy this if you just want to *use* Margin — the
-hosted instance handles that. Deploy it if you want your own backend
-(e.g. self-hosted Margin) or if you're contributing.
+You don't need to deploy this if you just want to *use* Margin. The
+hosted instance handles that. Deploy your own only if you want a
+self-hosted Margin or you're contributing.
 
 ## Local development
 

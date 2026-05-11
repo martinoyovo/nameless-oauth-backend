@@ -1,39 +1,32 @@
 # Deploying the Margin OAuth backend
 
 This is the production deployment runbook. After setup, **the OAuth
-backend deploys automatically on `git push`** — no Vercel CLI, no
+backend deploys automatically on `git push`.** No Vercel CLI, no
 `rm -rf .vercel` switching, no manual ceremony.
 
 ## Architecture
 
 One Vercel project. One GitHub repo. Two branches mapped to two
 environments. Two stable URLs. Two Notion integrations. Same code on
-both — Vercel injects different secrets per branch.
+both. Vercel injects different secrets per branch.
 
 ```
-GitHub repo (this monorepo, Vercel watches the oauth-backend/ subdir)
+GitHub repo
   │
-  ├─ main branch ────────────→ Vercel production deploy ──→ oauth.namelesstools.com
-  │                            env scope: production
-  │                            creds: "Margin" (prod) Notion integration
+  ├─ main branch ─────────────→ Vercel production deploy ──→ oauth.yourdomain.com
+  │                             env scope: production
+  │                             creds: prod Notion integration
   │
-  └─ develop branch ─────────→ Vercel branch deploy ──────→ oauth-staging.namelesstools.com
-                               env scope: preview
-                               creds: "Margin Dev" Notion integration
+  └─ develop branch ──────────→ Vercel branch deploy ──────→ oauth-staging.yourdomain.com
+                                env scope: preview
+                                creds: dev Notion integration
 ```
 
 **Workflow once set up:**
 - Push to `develop` → Vercel auto-deploys to staging in ~20s
 - Open PR `develop → main`, merge → Vercel auto-deploys to production
-- Bug in prod? `git revert <bad-commit>` and push — Vercel re-deploys
+- Bug in prod? `git revert <bad-commit>` and push, Vercel re-deploys
   the previous version. No dashboard, no manual rollback.
-
-No more `vercel deploy --prod` from a developer's laptop.
-
-> **Monorepo note**: this repo also contains the Electron app source
-> alongside `oauth-backend/`. Vercel watches only the `oauth-backend/`
-> subdirectory via the Root Directory setting — pushes that only touch
-> Electron code don't trigger any deploys.
 
 ---
 
@@ -43,54 +36,41 @@ No more `vercel deploy --prod` from a developer's laptop.
 
 At https://www.notion.so/my-integrations:
 
-**A. "Margin Dev"** (rename your existing dev integration to this name
-if you have one; otherwise create fresh).
+**A. Dev integration** (e.g. "Margin Dev").
 - Type: Public integration
-- Redirect URI: `https://oauth-staging.namelesstools.com/oauth/notion/callback`
-  (if you don't have your domain yet, use `https://<your-project>-git-develop-<scope>.vercel.app/oauth/notion/callback` — Vercel hands you this in step 4)
+- Redirect URI: `https://oauth-staging.yourdomain.com/oauth/notion/callback`
 - Copy the OAuth Client ID + Secret. Label them as DEV.
 
-**B. "Margin"** (new, production-facing — this is what shows on the
-consent screen the user sees).
+**B. Prod integration** (e.g. "Margin"). This name appears on the
+Notion consent screen users see.
 - Type: Public integration
-- Redirect URI: `https://oauth.namelesstools.com/oauth/notion/callback`
-  (or the Vercel-assigned production URL until you have your domain)
+- Redirect URI: `https://oauth.yourdomain.com/oauth/notion/callback`
 - Copy the OAuth Client ID + Secret. Label them as PROD.
 
 The two integrations share nothing. A leak of dev secrets does not
 compromise production. The prod integration must NOT whitelist
 localhost, ngrok, or any preview URLs.
 
-### 2. Push this repo to GitHub
+### 2. Fork this repo
 
-If you haven't created the GitHub repo yet (you do this — I can't
-without auth):
+1. Fork to your own GitHub account.
+2. Clone locally if you want to make changes.
+3. The fork already has `main` and `develop` branches set up.
 
-1. github.com → New → name it `margin` (or whatever) → **Private**
-2. Don't initialize with README/license/.gitignore — repo already has them.
-3. Copy the `git remote add origin ...` command GitHub shows you.
-
-Then locally, from this repo:
-```bash
-git remote add origin git@github.com:<you>/margin.git
-git push -u origin main
-git push -u origin develop
-```
-
-### 3. Connect Vercel to the repo (dashboard, ~3 minutes)
+### 3. Connect Vercel to the repo (~3 minutes)
 
 1. https://vercel.com → "Add New..." → "Project"
-2. Import your GitHub repo (Vercel will ask for GitHub permission on first use)
-3. Configure the project:
-   - **Project Name**: `margin-oauth`
-   - **Framework Preset**: "Other" (it's a plain Express app)
-   - **Root Directory**: `oauth-backend` ← **important** for monorepo
-   - **Build Command**: leave blank (no build step)
+2. Import your fork (Vercel asks for GitHub permission on first use).
+3. Configure:
+   - **Project Name**: anything you like (e.g. `oauth-backend`)
+   - **Framework Preset**: "Other"
+   - **Root Directory**: `./` (the repo root)
+   - **Build Command**: leave blank
    - **Output Directory**: leave blank
-   - **Install Command**: `npm install` (the default)
-4. Don't add env vars yet — do it in the next step where you can scope them.
-5. Click "Deploy". It'll fail to authenticate against Notion (no creds yet),
-   but the function itself will load and the project will be created.
+   - **Install Command**: `npm install`
+4. Don't add env vars yet. Next step.
+5. Click "Deploy". First deploy will succeed but the function will
+   report `"configured": false` until you set env vars in step 4.
 
 ### 4. Configure environment variables (Vercel dashboard)
 
@@ -100,11 +80,11 @@ Add **each of these three variables twice**, once per environment scope:
 
 | Variable | Production scope value | Preview scope value |
 |----------|------------------------|---------------------|
-| `NOTION_CLIENT_ID` | Margin (prod) integration's client_id | Margin Dev integration's client_id |
-| `NOTION_CLIENT_SECRET` | Margin (prod) secret | Margin Dev secret |
-| `NOTION_REDIRECT_URI` | `https://oauth.namelesstools.com/oauth/notion/callback` | `https://oauth-staging.namelesstools.com/oauth/notion/callback` |
+| `NOTION_CLIENT_ID` | prod integration's client_id | dev integration's client_id |
+| `NOTION_CLIENT_SECRET` | prod integration's secret | dev integration's secret |
+| `NOTION_REDIRECT_URI` | `https://oauth.yourdomain.com/oauth/notion/callback` | `https://oauth-staging.yourdomain.com/oauth/notion/callback` |
 
-(Use the bare Vercel URLs if you don't have a custom domain yet — see
+(Use the bare Vercel URLs if you don't have a custom domain yet, see
 step 5.)
 
 When adding each variable, check the boxes for which environments it
@@ -115,13 +95,11 @@ which we don't use).
 
 ### 5. Configure stable domains for both environments
 
-In the new project → Settings → Domains.
-
-Backend lives at `namelesstools.com` (kept separate from the future
-front-end / marketing domain). Add two subdomains to the Vercel project:
+In the new project → Settings → Domains. Add two subdomains to the
+Vercel project:
 
 **For production (`main` branch):**
-- Add `oauth.namelesstools.com`
+- Add `oauth.yourdomain.com`
 - Vercel will show the DNS record to add at your domain registrar:
   ```
   oauth   CNAME   cname.vercel-dns.com
@@ -129,7 +107,7 @@ front-end / marketing domain). Add two subdomains to the Vercel project:
 - SSL is automatic and free.
 
 **For staging (`develop` branch):**
-- Add `oauth-staging.namelesstools.com`
+- Add `oauth-staging.yourdomain.com`
 - Click "Edit" on the domain → "Git Branch" field → enter `develop`
 - This makes the alias point at `develop` instead of `main`. Every push
   to `develop` updates this domain in ~20s.
@@ -139,20 +117,19 @@ front-end / marketing domain). Add two subdomains to the Vercel project:
   ```
 
 Vercel propagates SSL certificates within a couple of minutes after DNS
-resolves. Until then, the bare `margin-oauth.vercel.app` URL still works
+resolves. Until then, the bare `<your-vercel-project>.vercel.app` URL still works
 as a fallback.
 
-### 6. Verify the Margin desktop client matches
+### 6. Point your desktop client at the backend
 
-In the Margin desktop app repo, `electron/config.ts` should point at
-these URLs:
+In the desktop app's `electron/config.ts`:
 
 ```ts
-const OAUTH_BACKEND_URL_DEV  = 'https://oauth-staging.namelesstools.com';
-const OAUTH_BACKEND_URL_PROD = 'https://oauth.namelesstools.com';
+const OAUTH_BACKEND_URL_DEV  = 'https://oauth-staging.yourdomain.com';
+const OAUTH_BACKEND_URL_PROD = 'https://oauth.yourdomain.com';
 ```
 
-The desktop app and this backend are loosely coupled — they only share
+The desktop app and this backend are loosely coupled, they only share
 URLs. If you ever change the backend domain, update those two constants
 in the desktop repo and ship a new release.
 
@@ -161,8 +138,8 @@ in the desktop repo and ship a new release.
 Healthcheck both URLs. They tell you if env vars are set correctly:
 
 ```bash
-curl https://oauth-staging.namelesstools.com/
-curl https://oauth.namelesstools.com/
+curl https://oauth-staging.yourdomain.com/
+curl https://oauth.yourdomain.com/
 ```
 
 Both should return `"configured": true`. If either reports `false` with
@@ -174,7 +151,7 @@ End-to-end OAuth test:
 
 ```bash
 HASH=$(node -e 'console.log("a".repeat(64))')
-curl -X POST https://oauth-staging.namelesstools.com/oauth/notion/start \
+curl -X POST https://oauth-staging.yourdomain.com/oauth/notion/start \
   -H 'Content-Type: application/json' \
   -d "{\"verifier_hash\":\"$HASH\"}"
 ```
@@ -186,10 +163,11 @@ client_id. (Repeat against production URL to verify that one uses the
 
 End-to-end via the Electron app:
 ```bash
-npm run electron:dev   # uses dev backend + Margin Dev integration
+npm run electron:dev   # uses staging backend + dev integration
 ```
-Click "Connect Notion". The consent screen should say "Margin Dev". For
-a packaged release build, it says "Margin".
+Click "Connect Notion". The consent screen should show your dev
+integration's name. Packaged release builds use the prod backend and
+show the prod integration's name.
 
 ---
 
@@ -199,7 +177,7 @@ a packaged release build, it says "Margin".
 
 ```bash
 git checkout develop
-# edit oauth-backend/server.js
+# edit server.js
 git commit -am "your change"
 git push                           # Vercel auto-deploys to oauth-staging in ~20s
 ```
@@ -209,7 +187,7 @@ Test it. If happy:
 ```bash
 git checkout main
 git merge develop
-git push                           # Vercel auto-deploys to oauth.namelesstools.com in ~20s
+git push                           # Vercel auto-deploys to oauth.yourdomain.com in ~20s
 ```
 
 ### Rollback
@@ -233,7 +211,7 @@ git push
 ### Monitoring
 
 - Logs: Vercel dashboard → Deployments → click any deployment → Functions tab
-- Uptime: set up Better Stack or UptimeRobot to ping `oauth.namelesstools.com/` every minute and alert on non-200. Free, 5 minutes to configure. **Strongly recommended** before launch.
+- Uptime: set up Better Stack or UptimeRobot to ping `oauth.yourdomain.com/` every minute and alert on non-200. Free, 5 minutes to configure. **Strongly recommended** before launch.
 
 ---
 
@@ -241,7 +219,7 @@ git push
 
 **"FUNCTION_INVOCATION_FAILED" on first request after deploy**
 The serverless function crashed loading. Used to happen when env vars
-were missing — that's now handled gracefully (see `server.js`
+were missing. That's now handled gracefully (see `server.js`
 `requireEnv` middleware). If you still see it, check Vercel logs for
 the actual stderr.
 
@@ -255,9 +233,9 @@ The redirect URI in your Notion integration's allowlist doesn't exactly
 match `NOTION_REDIRECT_URI` in Vercel. Both must be identical, including
 the `https://`, the trailing path, and any subdomain. Check both.
 
-**`develop` deploys but `oauth-staging.namelesstools.com` doesn't update**
+**`develop` deploys but `oauth-staging.yourdomain.com` doesn't update**
 The branch-domain alias isn't pointing at `develop`. Vercel dashboard →
-Project → Domains → edit `oauth-staging.namelesstools.com` → "Git Branch"
+Project → Domains → edit `oauth-staging.yourdomain.com` → "Git Branch"
 field should say `develop`.
 
 **Costs**
