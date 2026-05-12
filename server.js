@@ -62,6 +62,52 @@ if (!process.env.VERCEL) {
   }, 5 * 60 * 1000);
 }
 
+// Renders an OAuth callback page (success or error) in a style that
+// mirrors the Google sign-in callback page in nameless-frontend at
+// electron/auth/googleSigninServer.ts. Keep both sides in sync if the
+// look ever changes.
+function renderCallbackPage({ status, title, message }) {
+  const isError = status === 'error';
+  const iconChar = isError ? '!' : '✓';
+  const iconBg = isError ? '#ffebe9' : '#dafbe1';
+  const iconColor = isError ? '#cf222e' : '#1a7f37';
+  const iconBgDark = isError ? '#67060c' : '#033a16';
+  const iconColorDark = isError ? '#ff7b72' : '#56d364';
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[c]);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${esc(title)}</title>
+<style>
+  body { margin: 0; padding: 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f6f7f8; color: #1f2328; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .card { background: #fff; padding: 32px 40px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.05); text-align: center; max-width: 360px; }
+  h1 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+  p { margin: 0; font-size: 14px; color: #57606a; line-height: 1.5; }
+  .icon { width: 48px; height: 48px; border-radius: 50%; background: ${iconBg}; color: ${iconColor};
+    display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 24px; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0d1117; color: #f0f6fc; }
+    .card { background: #161b22; box-shadow: none; }
+    p { color: #8b949e; }
+    .icon { background: ${iconBgDark}; color: ${iconColorDark}; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">${iconChar}</div>
+    <h1>${esc(title)}</h1>
+    <p>${esc(message)}</p>
+  </div>
+</body>
+</html>`;
+}
+
 app.use(express.json());
 // Apply env guard to every OAuth route. Health check at `/` stays open
 // so you can curl it and see "ok: true" even before envs are set.
@@ -200,88 +246,33 @@ app.get('/oauth/notion/callback', async (req, res) => {
       stateStore.get(state).error = userMessage;
     }
 
-    res.status(400).send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Authorization Failed</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                   padding: 40px; text-align: center; background: #f5f5f5; }
-            .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px;
-                        border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-            h1 { color: #e74c3c; margin: 0 0 16px 0; }
-            p { color: #666; line-height: 1.6; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>❌ Authorization Failed</h1>
-            <p>${userMessage}</p>
-            <p>You can close this window and try again in the app.</p>
-          </div>
-        </body>
-      </html>
-    `);
+    res.status(400).send(renderCallbackPage({
+      status: 'error',
+      title: 'Authorization failed',
+      message: `${userMessage} Try again from the app.`,
+    }));
     return;
   }
 
   // Validate state
   if (!state || !stateStore.has(state)) {
     console.error(`[CALLBACK] Invalid state: ${state}`);
-    res.status(400).send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Invalid Request</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                   padding: 40px; text-align: center; background: #f5f5f5; }
-            .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px;
-                        border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-            h1 { color: #e74c3c; margin: 0 0 16px 0; }
-            p { color: #666; line-height: 1.6; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>⚠️ Invalid Request</h1>
-            <p>Invalid or expired state. Please try again from the app.</p>
-          </div>
-        </body>
-      </html>
-    `);
+    res.status(400).send(renderCallbackPage({
+      status: 'error',
+      title: 'Invalid request',
+      message: 'Invalid or expired state. Try again from the app.',
+    }));
     return;
   }
 
   if (!code) {
     console.error('[CALLBACK] Missing code');
     stateStore.get(state).error = 'Missing authorization code';
-    res.status(400).send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Missing Code</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                   padding: 40px; text-align: center; background: #f5f5f5; }
-            .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px;
-                        border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-            h1 { color: #e74c3c; margin: 0 0 16px 0; }
-            p { color: #666; line-height: 1.6; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>⚠️ Missing Code</h1>
-            <p>Authorization code is missing. Please try again.</p>
-          </div>
-        </body>
-      </html>
-    `);
+    res.status(400).send(renderCallbackPage({
+      status: 'error',
+      title: 'Missing code',
+      message: 'Authorization code is missing. Try again from the app.',
+    }));
     return;
   }
 
@@ -316,68 +307,21 @@ app.get('/oauth/notion/callback', async (req, res) => {
     stateStore.get(state).tokenResponse = tokenData;
 
     // Return success page
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Connected to Notion</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                   padding: 40px; text-align: center; background: #f5f5f5; }
-            .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px;
-                        border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-            h1 { color: #27ae60; margin: 0 0 16px 0; }
-            p { color: #666; line-height: 1.6; }
-            .success-icon { font-size: 48px; margin-bottom: 16px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="success-icon">✅</div>
-            <h1>Connected to Notion!</h1>
-            <p>You can now return to the app to continue setup.</p>
-            <p style="font-size: 14px; color: #999; margin-top: 24px;">
-              This window can be closed.
-            </p>
-          </div>
-        </body>
-      </html>
-    `);
+    res.send(renderCallbackPage({
+      status: 'success',
+      title: 'Connected to Notion',
+      message: 'You can close this tab and return to the app.',
+    }));
   } catch (error) {
     console.error('[CALLBACK] Error during token exchange:', error);
-    stateStore.get(state).error = error.message || 'Failed to exchange token';
+    const errMsg = error.message || 'Failed to exchange authorization code for token.';
+    stateStore.get(state).error = errMsg;
 
-    // Escape error text — it can come from a Notion response we don't fully trust.
-    const rawErr = error.message || 'Failed to exchange authorization code for token.';
-    const safeErr = String(rawErr).replace(/[&<>"']/g, (c) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    })[c]);
-
-    res.status(500).send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Token Exchange Failed</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                   padding: 40px; text-align: center; background: #f5f5f5; }
-            .container { max-width: 500px; margin: 0 auto; background: white; padding: 40px;
-                        border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-            h1 { color: #e74c3c; margin: 0 0 16px 0; }
-            p { color: #666; line-height: 1.6; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>❌ Connection Failed</h1>
-            <p>${safeErr}</p>
-            <p>Please return to the app and try again.</p>
-          </div>
-        </body>
-      </html>
-    `);
+    res.status(500).send(renderCallbackPage({
+      status: 'error',
+      title: 'Connection failed',
+      message: `${errMsg} Try again from the app.`,
+    }));
   }
 });
 
